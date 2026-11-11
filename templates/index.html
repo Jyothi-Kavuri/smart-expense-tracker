@@ -1,0 +1,293 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Expense Tracker</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<div class="app-layout">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-icon">₹</span>
+            <div>
+                <h2>SmartTrack</h2>
+                <small>Expense Manager</small>
+            </div>
+        </div>
+
+        <div class="side-heading">ADD NEW RECORD</div>
+
+        <form action="/add" method="POST" class="expense-form">
+
+            <label>NAME</label>
+            <input type="text" name="name" placeholder="Expense name" required>
+
+            <label>VALUE (₹)</label>
+            <input type="number" name="amount" placeholder="0.00"
+                   min="0.01" step="0.01" required>
+
+            <label>CATEGORY</label>
+            <select name="category" required>
+                <option value="">Select category</option>
+                <option value="Food">🍔 Food</option>
+                <option value="Other">📦 Other</option>
+                <option value="Home">🏠 Home</option>
+                <option value="Travel">🚗 Travel</option>
+                <option value="Shopping">🛍️ Shopping</option>
+                <option value="Education">📚 Education</option>
+                <option value="Bills">🧾 Bills</option>
+                <option value="Health">💊 Health</option>
+            </select>
+
+            <label>DATE</label>
+            <input type="date" name="expense_date"
+                   value="{{ dates[-1] if dates else '' }}">
+
+            <button type="submit" class="save-button">＋ Save Record</button>
+
+        </form>
+
+        <div class="side-heading">MONTHLY INCOME</div>
+
+        <form action="/set-income" method="POST">
+            <input type="number" name="income" min="0.01" step="0.01"
+                   placeholder="Enter income" required>
+            <button class="side-button" type="submit">Save Income</button>
+        </form>
+
+        <div class="side-heading">MONTHLY BUDGET</div>
+
+        <form action="/set-budget" method="POST">
+            <input type="number" name="budget" min="0.01" step="0.01"
+                   placeholder="Enter budget" required>
+            <button class="side-button" type="submit">Save Budget</button>
+        </form>
+
+        <a href="/export" class="export-side">↓ Export CSV</a>
+
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <div class="topbar">
+            <div>
+                <h1>Dashboard</h1>
+                <p>Track your spending and manage your money.</p>
+            </div>
+
+            <div class="date-label">
+                {{ dates[-1] if dates else 'Expense Overview' }}
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}
+                <div class="message">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+
+        <!-- SUMMARY CARDS -->
+        <section class="summary-grid">
+
+            <div class="summary-card income-card">
+                <div class="summary-label">TOTAL INCOME</div>
+                <div class="summary-value">₹{{ "%.2f"|format(income) }}</div>
+                <div class="summary-note">Monthly income</div>
+            </div>
+
+            <div class="summary-card expense-card">
+                <div class="summary-label">TOTAL EXPENSES</div>
+                <div class="summary-value">₹{{ "%.2f"|format(total) }}</div>
+                <div class="summary-note">This month</div>
+            </div>
+
+            <div class="summary-card balance-card">
+                <div class="summary-label">REMAINING BALANCE</div>
+                <div class="summary-value">₹{{ "%.2f"|format(balance) }}</div>
+                <div class="summary-note">Income minus expenses</div>
+            </div>
+
+        </section>
+
+
+        <!-- BUDGET -->
+        <section class="panel budget-panel">
+
+            <div class="panel-heading">
+                <h2>Monthly Budget</h2>
+                <span>₹{{ "%.2f"|format(budget) }}</span>
+            </div>
+
+            <div class="progress-track">
+                <div class="progress-fill"
+                     style="width: {{ progress }}%">
+                </div>
+            </div>
+
+            <div class="budget-info">
+                <span>{{ "%.1f"|format(progress) }}% used</span>
+
+                {% if budget <= 0 %}
+                    <span>Set your budget to begin</span>
+                {% elif total > budget %}
+                    <span class="danger-text">Budget exceeded!</span>
+                {% else %}
+                    <span class="success-text">Within budget</span>
+                {% endif %}
+            </div>
+
+        </section>
+
+
+        <!-- CHARTS -->
+        <section class="charts-grid">
+
+            <div class="panel chart-panel">
+                <div class="panel-heading">
+                    <h2>Category Breakdown</h2>
+                    <span>This month</span>
+                </div>
+
+                <div class="chart-box pie-box">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="panel chart-panel">
+                <div class="panel-heading">
+                    <h2>Daily Spending</h2>
+                    <span>This month</span>
+                </div>
+
+                <div class="chart-box">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+
+        </section>
+
+
+        <!-- EXPENSE HISTORY -->
+        <section class="panel history-panel">
+
+            <div class="panel-heading history-heading">
+                <div>
+                    <h2>Expense History</h2>
+                    <p>View and manage your transactions</p>
+                </div>
+
+                <a href="/export" class="export-button">↓ Export CSV</a>
+            </div>
+
+            <form method="GET" action="/" class="filter-form">
+
+                <div>
+                    <label>FROM DATE</label>
+                    <input type="date" name="start_date"
+                           value="{{ start_date }}">
+                </div>
+
+                <div>
+                    <label>TO DATE</label>
+                    <input type="date" name="end_date"
+                           value="{{ end_date }}">
+                </div>
+
+                <button type="submit">Filter</button>
+                <a href="/" class="clear-button">Clear</a>
+
+            </form>
+
+            <div class="table-wrapper">
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Amount</th>
+                            <th>Category</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for expense in expenses %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ expense['name'] }}</td>
+                            <td class="amount-cell">
+                                ₹{{ "%.2f"|format(expense['amount']) }}
+                            </td>
+                            <td>
+                                <span class="category-tag">
+                                    {{ expense['category'] }}
+                                </span>
+                            </td>
+                            <td>{{ expense['expense_date'] }}</td>
+
+                            <td class="action-cell">
+
+                                <a href="{{ url_for('edit', id=expense['id']) }}"
+                                   class="edit-button">Edit</a>
+
+                                <form action="{{ url_for('delete', id=expense['id']) }}"
+                                      method="POST"
+                                      onsubmit="return confirmDelete()">
+
+                                    <button class="delete-button"
+                                            type="submit">Delete</button>
+                                </form>
+
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="empty-row">
+                                No expenses found. Add your first expense!
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                    </tbody>
+                </table>
+
+            </div>
+
+        </section>
+
+        <footer>Smart Expense Tracker | Built with Python Flask</footer>
+
+    </main>
+</div>
+
+
+<!-- CHART DATA -->
+<script id="chart-data" type="application/json">
+{
+    "categories": {{ categories|tojson }},
+    "categoryAmounts": {{ category_amounts|tojson }},
+    "dates": {{ dates|tojson }},
+    "dailyAmounts": {{ daily_amounts|tojson }}
+}
+</script>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
